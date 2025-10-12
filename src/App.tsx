@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 import AppRouter from './router/AppRouter';
 import { fetchUser } from './features/auth/authSlice';
 import {useAppDispatch, useAppSelector} from "./hooks/hooks.ts";
+import { Toaster } from "@/components/ui/sonner";
 
 function App() {
     const dispatch = useAppDispatch();
@@ -18,7 +19,12 @@ function App() {
         }
     }, [authStage, dispatch]); // This effect runs once when the app loads and authStage is first determined
 
-    return <AppRouter />;
+    return (
+        <>
+            <AppRouter />
+            <Toaster richColors position="top-right" />
+        </>
+    );
 }
 
 export default App;

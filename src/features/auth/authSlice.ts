@@ -67,7 +67,7 @@ export const createUser = createAsyncThunk(
                 email: userData.email,
                 role_id: userData.role_id,
                 is_active: true, // This field is likely required by the Pydantic model.
-                mobile_device_id: "web-browser-signup" // Provide a placeholder as this is likely required.
+                mobile_device_id: "" // Provide a placeholder as this is likely required.
             };
             await apiClient.post<User>('/users/create', payload);
             return true; // Indicate success
