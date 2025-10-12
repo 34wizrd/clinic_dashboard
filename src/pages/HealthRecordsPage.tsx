@@ -1,13 +1,13 @@
 // src/pages/HealthRecordsPage.tsx
 
 import { useState, useEffect } from 'react';
-import { fetchHealthRecords, deleteHealthRecord, resetStatus, type HealthRecord } from '@/features/health-records/healthRecordSlice';
+import { fetchHealthRecords, deleteHealthRecord, type HealthRecord } from '@/features/health-records/healthRecordSlice';
 import { fetchAllPatients } from '@/features/patients/patientSlice';
 import { fetchAllDoctors } from '@/features/doctors/doctorSlice';
 import HealthRecordForm from '@/features/health-records/HealthRecordForm';
 import { toast } from "sonner";
 import ThirdFactorAuthModal from '@/features/auth/ThirdFactorAuthModal';
-import { selectIsThirdTokenValid } from '@/features/auth/authSlice';
+import { selectIsThirdTokenValid, fetchThirdToken } from '@/features/auth/authSlice';
 
 // Shadcn UI Components & Icons
 import { Button } from "@/components/ui/button";
@@ -37,6 +37,16 @@ const HealthRecordsPage = () => {
     const totalPages = Math.ceil(totalCount / pagination.pageSize) || 1;
     const isDoctor = user?.role_name === 'doctor';
 
+    // --- START: THE FIX ---
+    // This effect runs ONCE on initial page load.
+    useEffect(() => {
+        // Attempt to fetch the third token. If the backend session is still valid,
+        // this will succeed and populate the Redux store, triggering the data fetch below.
+        // If it fails, nothing happens, and the user will be prompted to authorize.
+        dispatch(fetchThirdToken());
+    }, [dispatch]);
+    // --- END: THE FIX ---
+
     useEffect(() => {
         // Only fetch if the token is valid and we need data
         if (isThirdTokenValid && status === 'idle') {
@@ -63,8 +73,8 @@ const HealthRecordsPage = () => {
             setPendingAction(null);
         } else {
             // If there was no pending action, it means the user just wanted to view records.
-            // Trigger a refetch by resetting the slice's status.
-            dispatch(resetStatus());
+            // The fetchThirdToken call in the auth modal will have updated the state.
+            // The useEffect that depends on `isThirdTokenValid` will now automatically trigger a refetch.
         }
     };
 
@@ -90,7 +100,7 @@ const HealthRecordsPage = () => {
     };
 
     const renderContent = () => {
-        if (!isThirdTokenValid) {
+        if (!isThirdTokenValid && status !== 'loading') {
             return (
                 <Card className="mt-6">
                     <CardHeader>
@@ -135,10 +145,8 @@ const HealthRecordsPage = () => {
         <div className="space-y-4">
             <div className="flex justify-between items-center">
                 <h1 className="text-3xl font-bold">Health Records</h1>
-                {/* --- UPDATED LOGIC --- */}
-                {/* Show button only if the user is a doctor AND their session is authorized */}
                 {isDoctor && isThirdTokenValid && (
-                    <Button onClick={() => setModalState({ type: 'create' })}>
+                    <Button onClick={() => handleActionWithAuth(() => setModalState({ type: 'create' }))}>
                         <FileHeart className="mr-2 h-4 w-4" />
                         Create Record
                     </Button>

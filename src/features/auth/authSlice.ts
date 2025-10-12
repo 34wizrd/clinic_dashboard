@@ -28,7 +28,7 @@ interface AuthState {
     finalToken: string | null;
     tempToken: string | null;
     thirdToken: string | null; // For temporary elevated access
-    thirdTokenExpiresAt: number | null; // Expiry timestamp
+    // REMOVED: thirdTokenExpiresAt, as the backend now handles expiration checks
     authStage: 'loggedOut' | 'otpRequired' | 'loggedIn';
     loading: 'idle' | 'pending' | 'succeeded' | 'failed';
     error: string | null;
@@ -41,20 +41,17 @@ const initialState: AuthState = {
     finalToken: finalToken,
     tempToken: null,
     thirdToken: null,
-    thirdTokenExpiresAt: null,
+    // REMOVED: thirdTokenExpiresAt
     authStage: finalToken ? 'loggedIn' : 'loggedOut',
     loading: 'idle',
     error: null,
 };
 
 // --- SELECTORS ---
+// UPDATED: The selector now simply checks for the presence of the token.
+// The frontend's responsibility is just to use the token; the backend will reject it if it's expired.
 export const selectIsThirdTokenValid = (state: RootState): boolean => {
-    const { thirdToken, thirdTokenExpiresAt } = state.auth;
-    if (!thirdToken || !thirdTokenExpiresAt) {
-        return false;
-    }
-    // Check if the token is still valid
-    return Date.now() < thirdTokenExpiresAt;
+    return !!state.auth.thirdToken;
 };
 
 
@@ -164,13 +161,14 @@ export const fetchThirdToken = createAsyncThunk(
     async (_, { rejectWithValue }) => {
         try {
             const response = await apiClient.get('/third-factor/third-token');
-            return response.data; // { third_token, expires_in_sec, message }
+            return response.data; // { third_token, message }
         } catch (error: unknown) {
             // We expect this to fail until the user approves, so we handle the error silently in the component
             return rejectWithValue(getErrorPayload(error));
         }
     }
 );
+
 
 // 6. The complete slice with all extraReducers
 const authSlice = createSlice({
@@ -182,7 +180,7 @@ const authSlice = createSlice({
             state.finalToken = null;
             state.tempToken = null;
             state.thirdToken = null;
-            state.thirdTokenExpiresAt = null;
+            // state.thirdTokenExpiresAt = null; // No longer needed
             state.authStage = 'loggedOut';
             localStorage.removeItem('finalAuthToken');
         },
@@ -238,10 +236,10 @@ const authSlice = createSlice({
                 state.finalToken = null;
                 localStorage.removeItem('finalAuthToken');
             })
-            // New reducer for when the third token is successfully fetched
+            // UPDATED: Reducer for when the third token is successfully fetched
             .addCase(fetchThirdToken.fulfilled, (state, action) => {
                 state.thirdToken = action.payload.third_token;
-                state.thirdTokenExpiresAt = Date.now() + action.payload.expires_in_sec * 1000;
+                // No longer need to set the expiration time
             });
     },
 });
