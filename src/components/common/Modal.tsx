@@ -1,91 +1,116 @@
 // src/pages/AppointmentsPage.tsx
-import { useEffect } from 'react';
 
-// Import Shadcn UI Components
+import { useState, useEffect } from 'react';
+import { fetchAppointments, deleteAppointment, type Appointment } from '../../features/appointments/appointmentSlice';
+import { fetchAllPatients } from '../../features/patients/patientSlice';
+import { fetchAllDoctors } from '../../features/doctors/doctorSlice';
+import AppointmentForm from '../../features/appointments/AppointmentForm';
+import { toast } from "sonner";
+
+// Shadcn UI Components & Icons
 import { Button } from "@/components/ui/button";
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogHeader,
-    DialogTitle,
-    DialogTrigger,
-} from "@/components/ui/dialog";
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from "@/components/ui/table";
-import AppointmentForm from "@/features/appointments/AppointmentForm.tsx";
-import {type Appointment, fetchAppointments} from "@/features/appointments/appointmentSlice.ts";
-import {useAppDispatch, useAppSelector} from "@/hooks/hooks.ts";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { FilePlus2 } from 'lucide-react';
+import { useAppDispatch, useAppSelector } from '@/hooks/hooks';
+import { AppointmentDataTable } from "@/features/appointments/AppointmentDataTable.tsx";
+
+type ModalState = {
+    type: 'create' | 'edit' | 'delete' | null;
+    data?: Appointment;
+};
 
 const AppointmentsPage = () => {
     const dispatch = useAppDispatch();
-    const { appointments, status, error } = useAppSelector((state) => state.appointments);
+    const { appointments, status, error, totalCount } = useAppSelector((state) => state.appointments);
 
+    // 1. Re-introduce state to manage pagination
+    const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 10 });
+    const [modalState, setModalState] = useState<ModalState>({ type: null });
+
+    const totalPages = Math.ceil(totalCount / pagination.pageSize);
+
+    // 2. Update useEffect to pass pagination arguments to the thunk
     useEffect(() => {
-        if (status === 'idle') {
-            dispatch(fetchAppointments());
-        }
-    }, [status, dispatch]);
+        // We can fetch data whenever pagination changes or after a successful mutation (status becomes 'idle')
+        dispatch(fetchAppointments({ page: pagination.pageIndex + 1, limit: pagination.pageSize }));
+
+        // Fetch lists needed for dropdowns in the form
+        dispatch(fetchAllPatients());
+        dispatch(fetchAllDoctors());
+    }, [dispatch, pagination.pageIndex, pagination.pageSize, status === 'idle']);
+
+    const handleCRUDSuccess = () => {
+        setModalState({ type: null });
+        // Trigger a refetch by dispatching the fetch action again for the current page
+        dispatch(fetchAppointments({ page: pagination.pageIndex + 1, limit: pagination.pageSize }));
+    };
+
+    const handleDelete = () => {
+        if (modalState.type !== 'delete' || !modalState.data) return;
+        const promise = dispatch(deleteAppointment(modalState.data.id)).unwrap();
+        toast.promise(promise, {
+            loading: 'Deleting appointment...',
+            success: () => {
+                handleCRUDSuccess();
+                return 'Appointment deleted successfully!';
+            },
+            error: (err) => err,
+        });
+    };
+
+    if (status === 'loading' && appointments.length === 0) {
+        return <p className="p-6 text-center text-muted-foreground">Loading appointments...</p>;
+    }
+
+    if (status === 'failed' && appointments.length === 0) {
+        return <p className="p-6 text-center text-destructive">{error}</p>;
+    }
 
     return (
         <div className="space-y-4">
             <div className="flex justify-between items-center">
                 <h1 className="text-3xl font-bold">Appointments</h1>
-                <Dialog>
-                    <DialogTrigger asChild>
-                        <Button>+ Create Appointment</Button>
-                    </DialogTrigger>
-                    <DialogContent className="sm:max-w-[425px]">
-                        <DialogHeader>
-                            <DialogTitle>Create New Appointment</DialogTitle>
-                            <DialogDescription>
-                                Fill in the details below to book a new appointment.
-                            </DialogDescription>
-                        </DialogHeader>
-                        {/* The Dialog will automatically close when the form succeeds due to re-render, but we can pass a handler for more control if needed */}
-                        <AppointmentForm onSuccess={() => {
-                            // The Dialog's open state isn't controlled by us, so we can't manually close it here.
-                            // A more advanced setup might involve controlling the Dialog's `open` prop with state.
-                            // For now, the toast notification provides enough feedback.
-                        }}/>
-                    </DialogContent>
-                </Dialog>
+                <Button onClick={() => setModalState({ type: 'create' })}>
+                    <FilePlus2 className="mr-2 h-4 w-4" />
+                    Create Appointment
+                </Button>
             </div>
 
-            <div className="border rounded-lg">
-                {status === 'loading' && <p className="p-4">Loading appointments...</p>}
-                {status === 'failed' && <p className="p-4 text-destructive">{error}</p>}
-                {status === 'succeeded' && (
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>Patient ID</TableHead>
-                                <TableHead>Doctor ID</TableHead>
-                                <TableHead>Starts At</TableHead>
-                                <TableHead>Status</TableHead>
-                                <TableHead>Reason</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {appointments.map((appt: Appointment) => (
-                                <TableRow key={appt.id}>
-                                    <TableCell className="font-medium">{appt.patient_id}</TableCell>
-                                    <TableCell>{appt.doctor_id}</TableCell>
-                                    <TableCell>{new Date(appt.starts_at).toLocaleString()}</TableCell>
-                                    <TableCell className="capitalize">{appt.status}</TableCell>
-                                    <TableCell>{appt.reason}</TableCell>
-                                </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
-                )}
-            </div>
+            {/* 3. Use the full-featured data table which includes pagination controls */}
+            <AppointmentDataTable
+                data={appointments}
+                pageCount={totalPages}
+                pageIndex={pagination.pageIndex}
+                pageSize={pagination.pageSize}
+                onPageChange={(pageIndex) => setPagination(prev => ({ ...prev, pageIndex }))}
+                onPageSizeChange={(pageSize) => setPagination({ pageIndex: 0, pageSize })}
+                onEdit={(appointment) => setModalState({ type: 'edit', data: appointment })}
+                onDelete={(appointment) => setModalState({ type: 'delete', data: appointment })}
+            />
+
+            {/* Modals for Create/Edit and Delete */}
+            <Dialog open={modalState.type === 'create' || modalState.type === 'edit'} onOpenChange={(isOpen) => !isOpen && setModalState({ type: null })}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>{modalState.type === 'edit' ? 'Edit Appointment' : 'New Appointment'}</DialogTitle>
+                    </DialogHeader>
+                    <AppointmentForm
+                        onSuccess={handleCRUDSuccess}
+                        appointmentToEdit={modalState.type === 'edit' ? modalState.data : undefined}
+                    />
+                </DialogContent>
+            </Dialog>
+            <AlertDialog open={modalState.type === 'delete'} onOpenChange={(isOpen) => !isOpen && setModalState({ type: null })}>
+                <AlertDialogContent>
+                    <AlertDialogHeader><AlertDialogTitle>Are you sure?</AlertDialogTitle></AlertDialogHeader>
+                    <AlertDialogDescription>This will permanently delete the selected appointment.</AlertDialogDescription>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleDelete} className="bg-red-600 hover:bg-red-700">Confirm</AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     );
 };
