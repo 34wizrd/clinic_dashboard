@@ -37,6 +37,11 @@ export function SiteHeader() {
                         </span>
                     ))}
                 </nav>
+                <div className="ml-auto flex items-center gap-2">
+                    <p className="text-sm text-muted-foreground">
+                        Powered by <a href="" target="_blank" rel="noopener noreferrer" className="font-semibold text-foreground hover:underline">Authree</a>
+                    </p>
+                </div>
                 {/*<div className="ml-auto flex items-center gap-2">*/}
                 {/*    <Button variant="ghost" asChild size="sm" className="hidden sm:flex">*/}
                 {/*        <a*/}
