@@ -38,24 +38,24 @@ const HealthRecordsPage = () => {
     const isDoctor = user?.role_name === 'doctor';
 
     // --- START: THE FIX ---
-    // This effect runs ONCE on initial page load.
+    // This effect runs ONCE on initial page load to validate the session.
     useEffect(() => {
         // Attempt to fetch the third token. If the backend session is still valid,
         // this will succeed and populate the Redux store, triggering the data fetch below.
-        // If it fails, nothing happens, and the user will be prompted to authorize.
+        // If it fails, it does so silently, and the UI will prompt for authorization.
         dispatch(fetchThirdToken());
     }, [dispatch]);
     // --- END: THE FIX ---
 
     useEffect(() => {
-        // Only fetch if the token is valid and we need data
-        if (isThirdTokenValid && status === 'idle') {
+        // This effect now correctly waits for the token to be validated before fetching.
+        if (isThirdTokenValid) {
             dispatch(fetchHealthRecords({ page: pagination.pageIndex + 1, limit: pagination.pageSize }));
         }
         // These can be fetched regardless as they are not as sensitive
         dispatch(fetchAllPatients());
         dispatch(fetchAllDoctors());
-    }, [dispatch, pagination.pageIndex, pagination.pageSize, status, isThirdTokenValid]);
+    }, [dispatch, pagination.pageIndex, pagination.pageSize, isThirdTokenValid]);
 
     const handleActionWithAuth = (action: () => void) => {
         if (isThirdTokenValid) {
@@ -71,11 +71,9 @@ const HealthRecordsPage = () => {
         if (pendingAction) {
             pendingAction();
             setPendingAction(null);
-        } else {
-            // If there was no pending action, it means the user just wanted to view records.
-            // The fetchThirdToken call in the auth modal will have updated the state.
-            // The useEffect that depends on `isThirdTokenValid` will now automatically trigger a refetch.
         }
+        // The fetchThirdToken call in the auth modal will have updated the state,
+        // so the useEffect that depends on `isThirdTokenValid` will now automatically trigger a refetch.
     };
 
     const handleDelete = () => {
@@ -100,7 +98,9 @@ const HealthRecordsPage = () => {
     };
 
     const renderContent = () => {
-        if (!isThirdTokenValid && status !== 'loading') {
+        // If the token is not valid (either initially or after the validation check fails),
+        // show the authorization prompt instead of attempting a failed API call.
+        if (!isThirdTokenValid) {
             return (
                 <Card className="mt-6">
                     <CardHeader>
